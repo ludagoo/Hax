@@ -1,0 +1,10 @@
+{
+  "name": "Hax",
+  "devDependencies": {
+    "jshint": "latest"
+  },
+  "scripts": {
+    "lint": "jshint js/**.js",
+    "build": "nodejs build.js"
+  }
+}
