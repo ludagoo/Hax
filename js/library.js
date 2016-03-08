@@ -6,12 +6,12 @@ var xbmcLibraryFactory = (function ($) {
 	  cache = {},
 	  DEBUG = window.DEBUG || true,
 	  
-	minutes2string = function (t) {
+	minutes2string = function (t) { //time in "h hours, m minutes"
 		var hours = Math.floor(t/60),
 		    mins  = Math.floor(t%60),
 		    out = [];
 		if (hours > 0) out.push(hours + ' hour' + (hours > 1 ? 's' : ''));
-		if (mins > 0) out.push(mins + ' minute' + (mins > 1 ? 's' : ''));
+		if (mins > 0) out.push((mins < 10 ? '0' : '') + mins + ' minute' + (mins > 1 ? 's' : ''));
 		return out.join(' ');
 	},
 
@@ -19,7 +19,7 @@ var xbmcLibraryFactory = (function ($) {
 		return minutes2string(Math.round(t/60));
 	},
 
-	seconds2shortstring = function (t) {
+	seconds2shortstring = function (t) { //time in hh:MM:SS format
 		var str = function (n) {
 			return (n < 10 && n > -10 ? '0' : '')+Math.floor(n);
 		};
@@ -36,25 +36,87 @@ var xbmcLibraryFactory = (function ($) {
 		].join(' ');
 	},
 
+	Page = class {
+		constructor() {
+
+		}
+		render() {
+			console.log('rendering')
+			//this.data should be an async function that returns the page data
+			var data = this.data,
+				page = this;
+			Q().
+				add(function (c) {
+					//get the page data 
+					data(function (d) { data = d; c(); });
+				}).
+				add(function (c) {
+					//sort and group the data
+					
+					var groupby = getHash('group') || page.groupby;
+					
+					if (getHash('sort') || page.sortby) data.items = sortItems(data.items, getHash('sort') || page.sortby);
+
+					if (groupby) {
+						var size = data.items.length;
+						data.groupby = groupby;
+						data.items = sortItems(groupItems(data.items, groupby), 'label');
+						if (getHash(groupby)) data.items = data.items.filter(function (x) {
+							return x.label === getHash(groupby);
+						});
+						else if (size > 100) {
+							data.collapsed = true;
+							data.items = data.items.map(function (x) {
+								return {
+									'label': x.label,
+									'link': document.location.hash+'&'+groupby+'='+x.label
+								}
+							});
+						}
+					}
+
+					c();
+				}).
+				add(function (c) {
+					//render the data to the DOM via the template
+					data.id = page.title;
+					document.title = 'Hax//'+(data.title ? data.title : 'Kodi');
+					
+					var p = $('<div class="page" data-page="'+page.title+'"></div>'),
+					v = $(template[getHash('view') || page.view].bind(data)).appendTo(p);
+					$('#content').empty().append(p);
+					if (page.then instanceof Function) page.then(p.get(0)); //TODO: what does 'then' do?
+					
+					$('body').scrollTop(0); //scroll to the top of the page
+					$('#loading').stop(true).hide();
+					v.find('img').filter('[data-original]').lazyload(LAZYLOAD_OPTIONS); //initialize the lazyload plugin
+				}).
+				start();
+		}
+	},
 	pages = {
-		'Home': {
-			'view': 'list',
-			'data': function (callback) {
+		'Home': class extends Page {
+			constructor () {
+				super();
+				this.view = 'list';
+			}
+			data (callback) {
 				var items = [
 					{ 'label': 'Videos', 'link': '#page=Menu&media=Videos', 'thumbnail': 'img/icons/home/videos.png' },
 					{ 'label': 'Music', 'link': '#page=Menu&media=Music', 'thumbnail': 'img/icons/home/music.png' },
 					{ 'label': 'Pictures', 'link': '#page=Menu&media=Pictures', 'thumbnail': 'img/icons/home/pictures.png' },
-					//{ 'label': 'Live', 'link': '#page=Live', 'thumbnail':'img/icons/home/live.png' },
+					{ 'label': 'Live', 'link': '#page=Live', 'thumbnail':'img/icons/home/live.png' },
 					{ 'label': 'Playlists', 'link': '#page=Playlists', 'thumbnail':'img/icons/home/playlists.png' },
-					//{ 'label': 'Remote', 'link': '#page=Remote', 'thumbnail':'img/icons/home/remote.png' },
-					//{ 'label': 'Settings', 'link': '#page=Settings', 'thumbnail':'img/icons/home/settings.png' }
 				];
-				callback({ 'items': items, /*'fanart': 'img/backgrounds/default.jpg',*/ 'hideNavigation': true });
+				callback({ 'items': items, 'hideNavigation': true });
 			}
 		},
-		'Menu': {
-			'view': 'list',
-			'data': function (callback) {
+		'Menu': class extends Page {
+			constructor () {
+				super();
+				this.view = 'list';
+			}
+			data (callback) {
 				var q = Q(), media = getHash('media'),
 				m = ({'Videos':'video','Music':'music','Pictures':'pictures'})[media],
 				x = ({'Videos':'video','Music':'audio','Pictures':'picture'})[media],
@@ -110,9 +172,12 @@ var xbmcLibraryFactory = (function ($) {
 				q.start();
 			}
 		},
-		'Genres': {
-			'view': 'list',
-			'data': function (callback) {
+		'Genres': class extends Page {
+			constructor () {
+				super();
+				this.view = 'list';
+			}
+			data (callback) {
 				var page = {}, q = Q();
 				q.add(function (c) {
 					var type = getHash('type'),
@@ -135,10 +200,13 @@ var xbmcLibraryFactory = (function ($) {
 				q.start();
 			}
 		},
-		'Movies': {
-			'view': 'list',
-			'groupby': 'year',
-			'data': function (callback) {
+		'Movies': class extends Page {
+			constructor () {
+				super();
+				this.view = 'list';
+				this.groupby = 'year';
+			}
+			data (callback) {
 				var page = { title: 'Movies' }, q = Q();
 				q.add(function (c) { //get movies
 					var year = getHash('year'),
@@ -171,10 +239,12 @@ var xbmcLibraryFactory = (function ($) {
 				q.start();
 			}
 		},
-		'Movie': {
-			'view': 'list',
-			'parent': 'Movies',
-			'data': function (callback) {
+		'Movie': class extends Page {
+			constructor () {
+				super();
+				this.view = 'list';
+			}
+			data (callback) {
 				var page = {}, q = Q();
 				var movieid = +getHash('movieid');
 				q.add(function (c) { //get movie details
@@ -208,10 +278,13 @@ var xbmcLibraryFactory = (function ($) {
 				q.start();
 			}
 		},
-		'TV Shows': {
-			'view': 'list',
-			'groupby': 'alpha',
-			'data': function (callback) {
+		'TV Shows': class extends Page {
+			constructor () {
+				super();
+				this.view = 'list';
+				this.groupby = 'alpha';
+			}
+			data (callback) {
 				var page = { title: 'TV Shows' }, q = Q();
 				q.add(function (c) { //get tv shows
 					var year = getHash('year'),
@@ -239,12 +312,15 @@ var xbmcLibraryFactory = (function ($) {
 				q.start();
 			}
 		},
-		'TV Show': {
-			'view': 'list',
-			'parent': 'TV Shows',
-			'groupby': 'season',
-			'sortgroup': 'season',
-			'data': function (callback) {
+		'TV Show': class extends Page {
+			constructor () {
+				super();
+				this.view = 'list';
+				this.parent = 'TV Shows';
+				this.groupby = 'season';
+				this.sortgroup = 'season';
+			}
+			data (callback) {
 				var page = {}, tvshowid = +getHash('tvshowid');
 				Q().
 				  add(function (c) { //get show details
@@ -287,10 +363,13 @@ var xbmcLibraryFactory = (function ($) {
 				  start();
 			}
 		},
-		'Episode': {
-			'view': 'list',
-			'parent': 'TV Shows',
-			'data': function (callback) {
+		'Episode': class extends Page {
+			constructor () {
+				super();
+				this.view = 'list';
+				this.parent = 'TV Show';
+			}
+			data (callback) {
 				var page = {}, tvshowid = +getHash('tvshowid'), episodeid = +getHash('episodeid');
 				Q().
 				  add(function (c) { //get episode details
@@ -323,44 +402,18 @@ var xbmcLibraryFactory = (function ($) {
 				  start();
 			}
 		},
-		'Music Videos': {
-			'view': 'list',
-			'groupby': 'artist',
-			'data': function (callback) {
-				var page = { title: 'Music Videos' }, q = Q();
-				q.add(function (c) { //get music videos
-					xbmc.GetMusicVideos(function (d) {
-						page.items = d.musicvideos || [];
-						c();
-					});
-				});
-				q.add(function (c) { //format music videos
-				  	$.each(page.items, function (i, mv) {
-				  		mv.artist = mv.artist.join(', ');
-				  		mv.label = mv.title;
-				  		mv.details = (mv.album ? mv.album+(mv.year ? ' ('+mv.year+')' : '') : '');
-						if (mv.thumbnail) mv.thumbnail = xbmc.vfs2uri(mv.thumbnail);
-						mv.play = function () {
-							xbmc.Open({ 'item': { 'file': xbmc.vfs2uri(mv.file) } });
-							//xbmc.Play({ 'file': mv.file }, 1);
-						};
-					});
-					c();
-				});
-				q.onfinish(function () {
-					callback(page);
-				});
-				q.start();
+		'Addons': class extends Page {
+			constructor () {
+				super();
+				this.view = 'list';
+				this.groupby = 'type';
 			}
-		},
-		'Addons': {
-			'view': 'list',
-			'groupby': 'type',
-			'data': function (callback) {
+			data (callback) {
 				var page = { title: 'Add-ons', items: [] }, q = Q();
 				q.add(function (c) {
 					xbmc.GetAddons({ 'type': 'xbmc.python.script' }, function (d) {
 						page.items = d.addons;
+						console.log(d);
 						c();
 					});
 				});
@@ -391,9 +444,12 @@ var xbmcLibraryFactory = (function ($) {
 				q.start();
 			}
 		},
-		'Live': {
-			'view': 'list',
-			'data': function (callback) {
+		'Live': class extends Page {
+			constructor () {
+				super();
+				this.view = 'list';
+			}
+			data (callback) {
 				var page = { title: 'Live', items: [] }, q = Q();
 				$.each(['TV', 'Radio'], function (i, type) {
 					q.add(function (c) { //get groups
@@ -415,9 +471,12 @@ var xbmcLibraryFactory = (function ($) {
 				q.start();
 			}
 		},
-		'Channels': {
-			'view': 'list',
-			'data': function (callback) {
+		'Channels': class extends Page {
+			constructor () {
+				super();
+				this.view = 'list';
+			}
+			data (callback) {
 				var page = { }, q = Q(),
 				groupid = +getHash('id');
 				q.add(function (c) { //get groups
@@ -446,10 +505,13 @@ var xbmcLibraryFactory = (function ($) {
 				q.start();
 			}
 		},
-		'Artists': {
-			'view': 'list',
-			'groupby': 'alpha',
-			'data': function (callback) {
+		'Artists': class extends Page {
+			constructor () {
+				super();
+				this.view = 'list';
+				this.groupby = 'alpha';
+			}
+			data (callback) {
 				var page = { title: 'Artists' }, q = Q(),
 				genre = getHash('genre'),
 				alpha = getHash('alpha');
@@ -475,10 +537,13 @@ var xbmcLibraryFactory = (function ($) {
 				q.start();
 			}
 		},
-		'Artist': {
-			'view': 'list',
-			'groupby': 'year',
-			'data': function (callback) {
+		'Artist': class extends Page {
+			constructor () {
+				super();
+				this.view = 'list';
+				this.groupby = 'year';
+			}
+			data (callback) {
 				var page = {}, artistid = +getHash('artistid');
 				Q().
 				  add(function (c) { //get artist details
@@ -516,10 +581,13 @@ var xbmcLibraryFactory = (function ($) {
 				  start();
 			}
 		},
-		'Album': {
-			'view': 'list',
-			'parent': 'Music',
-			'data': function (callback) {
+		'Album': class extends Page {
+			constructor () {
+				super();
+				this.view = 'list';
+				this.parent = 'Music';
+			}
+			data (callback) {
 				var page = {}, albumid = +getHash('albumid');
 				Q().
 				  add(function (c) { //get album details
@@ -566,9 +634,12 @@ var xbmcLibraryFactory = (function ($) {
 				  start();
 			}
 		},
-		'Files': {
-			'view': 'list',
-			'data': function (callback) {
+		'Files': class extends Page {
+			constructor () {
+				super();
+				this.view = 'list';
+			}
+			data (callback) {
 				var page = { 'title': 'Files', 'items': [
 					{ 'media': 'video', 'label': 'Video' },
 					{ 'media': 'music', 'label': 'Music' },
@@ -600,10 +671,13 @@ var xbmcLibraryFactory = (function ($) {
 				q.start();
 			}
 		},
-		'Directory': {
-			'view': 'list',
-			'parent': 'Files',
-			'data': function (callback) {
+		'Directory': class extends Page {
+			constructor () {
+				super();
+				this.view = 'list';
+				this.parent = 'Files';
+			}
+			data (callback) {
 				var directory = getHash('directory'), page = {}, media = getHash('media') || '';
 				var pathSplit = function (path) {
 					return path.split(new RegExp('[\\/]'));
@@ -659,9 +733,12 @@ var xbmcLibraryFactory = (function ($) {
 				  start();
 			}
 		},
-		'Playlists': {
-			'view': 'list',
-			'data': function (callback) {
+		'Playlists': class extends Page {
+			constructor () {
+				super();
+				this.view = 'list';
+			}
+			data (callback) {
 				var page = { 'title': 'Playlists' }, player;
 				Q().
 				  add(function (c) { //get playlists
@@ -750,65 +827,20 @@ var xbmcLibraryFactory = (function ($) {
 			return 0;
 		});
 	},
+	
 	renderPage = function (title) {
-		var data, page, defaultPage = 'Home', hash = document.location.hash.replace(/\W/g,'');
-		
-		//find the page to render
-		if (!title) title = getHash('page') || defaultPage;
-		title = title.replace('%20',' '); //some browsers replace spaces with %20
-		page = pages[title];
-		if (!page) page = pages[defaultPage];
-		
-		if (DEBUG) console.log('Library: Fetching data: '+title);
-		
-		//if the data isn't a function, turn it into one
-		if (!page.data) data = function (callback) { callback({}) };
-		else if (!(page.data instanceof Function)) data = function (callback) { callback(page.data) };
-		else data = page.data;
+			var data, page, defaultPage = 'Home', hash = document.location.hash.replace(/\W/g,'');
+			
+			//find the page to render
+			if (!title) title = getHash('page') || defaultPage;
+			title = title.replace('%20',' '); //some browsers replace spaces with %20
+			var page = pages[title];
+			if (!page) page = pages[defaultPage];
+			
+			if (DEBUG) console.log('Library: Rendering page: '+title);
 
-		//get the page data
-		data(function (data) {
-			var groupby = getHash('group') || page.groupby;
-			if (DEBUG) console.log('Library: Rendering page: '+title, data);
-			
-			//sort and group the data
-			if (getHash('sort') || page.sortby) data.items = sortItems(data.items, getHash('sort') || page.sortby)
-			if (groupby) {
-				var size = data.items.length;
-				data.groupby = groupby;
-				data.items = sortItems(groupItems(data.items, groupby), 'label');
-				if (getHash(groupby)) data.items = data.items.filter(function (x) {
-					return x.label === getHash(groupby);
-				});
-				else if (size > 100) {
-					data.collapsed = true;
-					data.items = data.items.map(function (x) {
-						return {
-							'label': x.label,
-							'link': document.location.hash+'&'+groupby+'='+x.label
-						}
-					});
-				}
-			}
-
-			data.id = title;
-			document.title = 'Hax//'+(data.title ? data.title : 'Kodi');
-			
-			//render the data to the DOM via the template
-			var p = $('<div class="page" data-page="'+title+'"></div>'),
-			v = $(template[getHash('view') || page.view].bind(data)).appendTo(p);
-			$('#content').empty().append(p);
-			if (page.then instanceof Function) page.then(p.get(0));
-			
-			$('body').scrollTop(0); //scroll to the top of the page
-			$('#loading').stop(true).hide();
-			v.find('img').filter('[data-original]').lazyload(LAZYLOAD_OPTIONS); //initialize the lazyload plugin
-		});
-		
-		//select and scroll to the appropriate button in the header
-		//if (page.parent) buttons.select(page.parent);
-		//else buttons.select(title);
-	};
+			new page().render();
+	}
 	
 	return function () {
 		//render the buttons

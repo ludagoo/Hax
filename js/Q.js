@@ -134,7 +134,7 @@ jQuery(function () {
 		};
 		
 		//if something is passed to the constructor, pass it to the decorator function
-		if (x) q(x);
+		if (x !== undefined) q(x);
 		
 		return q;
 	}
