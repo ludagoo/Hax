@@ -62,7 +62,7 @@ jQuery(function () { //on document load
 		window.xbmc = xbmcFactory(address,
 		  function () { //connected
 			html.app();
-			xbmcPlayer = xbmcPlayerFactory();
+//			xbmcPlayer = xbmcPlayerFactory();
 			xbmcLibrary = xbmcLibraryFactory();
 			storeAddress(address);
 		  },
