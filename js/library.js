@@ -1018,7 +1018,7 @@ var xbmcLibraryFactory = (function ($) {
 			}
 
 			data.id = title;
-			document.title = 'Hax//'+(data.title || 'Kodi');
+			document.title = data.title;
 			
 			//render the data to the DOM via the template
 			var p = $('<div class="page" data-page="'+title+'"></div>'),
