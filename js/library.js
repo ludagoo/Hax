@@ -513,7 +513,7 @@ var xbmcLibraryFactory = (function ($) {
 		'data': function (callback) {
 			var page = { },
 				q = Q(),
-				groupid = +getHash('id');
+				groupid = 1 //+getHash('id');
 
 			q.add(function (c) { //get groups
 				xbmc.GetChannelGroupDetails({ 'channelgroupid': groupid }, function (d) {
@@ -972,7 +972,7 @@ var xbmcLibraryFactory = (function ($) {
 	var renderPage = function (title) {
 		var data,
 			page,
-			defaultPage = 'Live',
+			defaultPage = 'Channels',
 			hash = document.location.hash.replace(/\W/g,'');
 		
 		//find the page to render
