@@ -972,7 +972,7 @@ var xbmcLibraryFactory = (function ($) {
 	var renderPage = function (title) {
 		var data,
 			page,
-			defaultPage = 'Home',
+			defaultPage = 'Channels',
 			hash = document.location.hash.replace(/\W/g,'');
 		
 		//find the page to render
